@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTML Potrace WASM</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --text: #17202a;
+      --muted: #5f6b7a;
+      --line: #d9e0e8;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --danger: #b42318;
+      --shadow: 0 12px 28px rgba(31, 41, 55, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    .app {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status {
+      min-width: 170px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .controls {
+      position: sticky;
+      top: 16px;
+      padding: 16px;
+    }
+
+    .dropzone {
+      display: grid;
+      place-items: center;
+      min-height: 150px;
+      border: 2px dashed #aeb8c4;
+      border-radius: 8px;
+      background: #fbfcfd;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 160ms ease, background 160ms ease;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: #edfdfa;
+    }
+
+    .dropzone input {
+      display: none;
+    }
+
+    .dropzone strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+
+    .dropzone span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .field {
+      margin-top: 16px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .value {
+      color: var(--muted);
+      font-weight: 520;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 520;
+    }
+
+    .check input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    button,
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 9px 12px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 680;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    button:disabled,
+    .button.disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .primary:hover:not(:disabled) {
+      background: var(--accent-strong);
+    }
+
+    .secondary {
+      background: #eef2f6;
+      border-color: #d8e0e8;
+      color: var(--text);
+    }
+
+    .meta {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .preview {
+      min-height: 360px;
+      padding: 14px;
+      overflow: hidden;
+    }
+
+    .preview h2 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 300px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(45deg, #eef2f6 25%, transparent 25%),
+        linear-gradient(-45deg, #eef2f6 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #eef2f6 75%),
+        linear-gradient(-45deg, transparent 75%, #eef2f6 75%);
+      background-color: white;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+      background-size: 20px 20px;
+      overflow: auto;
+    }
+
+    canvas,
+    .stage svg {
+      display: block;
+      max-width: 100%;
+      max-height: 420px;
+    }
+
+    .empty {
+      padding: 24px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .code-panel {
+      padding: 14px;
+    }
+
+    .code-panel h2 {
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      resize: vertical;
+      color: #111827;
+      background: #fbfcfd;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 840px) {
+      header,
+      .layout,
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        display: grid;
+        align-items: start;
+      }
+
+      .status {
+        text-align: left;
+      }
+
+      .controls {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>HTML Potrace WASM</h1>
+        <p class="subtitle">Convert a local bitmap image to a single-color SVG in your browser.</p>
+      </div>
+      <div class="status" id="status">Loading Potrace...</div>
+    </header>
+
+    <div class="layout">
+      <section class="panel controls" aria-label="Conversion controls">
+        <label class="dropzone" id="dropzone">
+          <input id="fileInput" type="file" accept="image/*">
+          <span>
+            <strong>Choose an image</strong>
+            <span>or drop one here</span>
+          </span>
+        </label>
+
+        <div class="field">
+          <label for="threshold">
+            Threshold
+            <span class="value" id="thresholdValue">128</span>
+          </label>
+          <input id="threshold" type="range" min="0" max="255" value="128">
+        </div>
+
+        <label class="check">
+          <input id="invert" type="checkbox">
+          Invert black and white
+        </label>
+
+        <div class="actions">
+          <button class="primary" id="convertButton" type="button" disabled>Convert to SVG</button>
+          <a class="button secondary disabled" id="downloadButton" href="#" download="traced.svg" aria-disabled="true">Download SVG</a>
+        </div>
+
+        <div class="meta" id="fileMeta">No image selected.</div>
+      </section>
+
+      <section class="workspace" aria-label="Preview workspace">
+        <div class="preview-grid">
+          <article class="panel preview">
+            <h2>Threshold Preview</h2>
+            <div class="stage">
+              <canvas id="previewCanvas" hidden></canvas>
+              <div class="empty" id="previewEmpty">Upload an image to see the black and white input sent to Potrace.</div>
+            </div>
+          </article>
+
+          <article class="panel preview">
+            <h2>SVG Output</h2>
+            <div class="stage" id="svgStage">
+              <div class="empty">The generated SVG will appear here.</div>
+            </div>
+          </article>
+        </div>
+
+        <article class="panel code-panel">
+          <h2>SVG Markup</h2>
+          <textarea id="svgCode" spellcheck="false" readonly placeholder="SVG markup will appear here after conversion."></textarea>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <script src="./lib/potrace-wasm.js"></script>
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const dropzone = document.getElementById("dropzone");
+    const threshold = document.getElementById("threshold");
+    const thresholdValue = document.getElementById("thresholdValue");
+    const invert = document.getElementById("invert");
+    const convertButton = document.getElementById("convertButton");
+    const downloadButton = document.getElementById("downloadButton");
+    const fileMeta = document.getElementById("fileMeta");
+    const statusEl = document.getElementById("status");
+    const previewCanvas = document.getElementById("previewCanvas");
+    const previewEmpty = document.getElementById("previewEmpty");
+    const svgStage = document.getElementById("svgStage");
+    const svgCode = document.getElementById("svgCode");
+
+    let sourceImage = null;
+    let sourceName = "traced";
+    let lastObjectUrl = null;
+
+    function setStatus(message, isError) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", Boolean(isError));
+    }
+
+    function baseName(filename) {
+      const clean = filename.replace(/\.[^.]+$/, "");
+      return clean || "traced";
+    }
+
+    function revokeDownloadUrl() {
+      if (lastObjectUrl) {
+        URL.revokeObjectURL(lastObjectUrl);
+        lastObjectUrl = null;
+      }
+    }
+
+    function setDownload(svg) {
+      revokeDownloadUrl();
+      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      lastObjectUrl = URL.createObjectURL(blob);
+      downloadButton.href = lastObjectUrl;
+      downloadButton.download = `${sourceName}.svg`;
+      downloadButton.classList.remove("disabled");
+      downloadButton.setAttribute("aria-disabled", "false");
+    }
+
+    function disableDownload() {
+      revokeDownloadUrl();
+      downloadButton.href = "#";
+      downloadButton.classList.add("disabled");
+      downloadButton.setAttribute("aria-disabled", "true");
+    }
+
+    function drawThresholdPreview() {
+      if (!sourceImage) return;
+
+      const maxSide = 1400;
+      const scale = Math.min(1, maxSide / Math.max(sourceImage.naturalWidth, sourceImage.naturalHeight));
+      const width = Math.max(1, Math.round(sourceImage.naturalWidth * scale));
+      const height = Math.max(1, Math.round(sourceImage.naturalHeight * scale));
+
+      previewCanvas.width = width;
+      previewCanvas.height = height;
+      previewCanvas.hidden = false;
+      previewEmpty.hidden = true;
+
+      const ctx = previewCanvas.getContext("2d", { willReadFrequently: true });
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(sourceImage, 0, 0, width, height);
+
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      const limit = Number(threshold.value);
+      const shouldInvert = invert.checked;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3] / 255;
+        const luminance = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) * alpha + 255 * (1 - alpha);
+        let black = luminance < limit;
+        if (shouldInvert) black = !black;
+        const value = black ? 0 : 255;
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+        data[i + 3] = 255;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      disableDownload();
+      svgStage.innerHTML = '<div class="empty">Click Convert to SVG to trace this preview.</div>';
+      svgCode.value = "";
+    }
+
+    async function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) {
+        setStatus("Please choose an image file.", true);
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        sourceImage = image;
+        sourceName = baseName(file.name);
+        fileMeta.textContent = `${file.name} - ${image.naturalWidth} x ${image.naturalHeight}px`;
+        convertButton.disabled = false;
+        drawThresholdPreview();
+        URL.revokeObjectURL(objectUrl);
+        setStatus("Ready");
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        setStatus("Could not load this image.", true);
+      };
+      image.src = objectUrl;
+    }
+
+    async function convertToSvg() {
+      if (!sourceImage) return;
+      if (typeof window.potraceFromCanvas !== "function") {
+        setStatus("Potrace API is not available.", true);
+        return;
+      }
+
+      convertButton.disabled = true;
+      setStatus("Tracing...");
+
+      try {
+        await window.potraceReady;
+        drawThresholdPreview();
+        const svg = await window.potraceFromCanvas(previewCanvas);
+        const finalSvg = svg.trim();
+
+        svgStage.innerHTML = finalSvg || '<div class="empty">Potrace returned an empty SVG.</div>';
+        svgCode.value = finalSvg;
+
+        if (finalSvg) {
+          setDownload(finalSvg);
+          setStatus("SVG ready");
+        } else {
+          disableDownload();
+          setStatus("Empty result", true);
+        }
+      } catch (error) {
+        console.error(error);
+        setStatus(error && error.message ? error.message : "Conversion failed.", true);
+      } finally {
+        convertButton.disabled = false;
+      }
+    }
+
+    fileInput.addEventListener("change", () => {
+      loadFile(fileInput.files[0]);
+    });
+
+    threshold.addEventListener("input", () => {
+      thresholdValue.textContent = threshold.value;
+      drawThresholdPreview();
+    });
+
+    invert.addEventListener("change", drawThresholdPreview);
+    convertButton.addEventListener("click", convertToSvg);
+
+    downloadButton.addEventListener("click", (event) => {
+      if (downloadButton.classList.contains("disabled")) {
+        event.preventDefault();
+      }
+    });
+
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("dragover");
+    });
+
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("dragover");
+      loadFile(event.dataTransfer.files[0]);
+    });
+
+    if (window.potraceReady) {
+      window.potraceReady
+        .then(() => setStatus("Ready"))
+        .catch((error) => setStatus(error && error.message ? error.message : "Potrace failed to load.", true));
+    } else {
+      setStatus("Potrace failed to load.", true);
+    }
+  </script>
+</body>
+</html>
